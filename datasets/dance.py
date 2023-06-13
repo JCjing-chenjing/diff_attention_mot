@@ -67,15 +67,7 @@ class DanceDataset(Dataset):
         if self.transform is not None:
             pre_images, pre_targets = self.transform(pre_images, pre_targets)
             cur_images, cur_targets = self.transform(cur_images, cur_targets)
-        # gt_instances, proposals = [], []
-        # for img_i, targets_i in zip(images, targets):
-        #     gt_instances_i = self._targets_to_instances(targets_i, img_i.shape[1:3])
-        #     gt_instances.append(gt_instances_i)
-        #     n_gt = len(targets_i['labels'])
-        #     proposals.append(torch.cat([
-        #         targets_i['boxes'][n_gt:],
-        #         targets_i['scores'][n_gt:, None],
-        #     ], dim=1))
+ 
         return {
             'pre_imgs': pre_images, 
             "cur_images": cur_images,
