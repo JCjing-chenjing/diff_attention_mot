@@ -206,6 +206,66 @@ def hflip(image, target):
     return flipped_image, target
 
 
+# def resize(image, target, size, max_size=None):
+#     # size can be min_size (scalar) or (w, h) tuple
+
+#     def get_size_with_aspect_ratio(image_size, size, max_size=None):
+#         w, h = image_size
+#         if max_size is not None:
+#             min_original_size = float(min((w, h)))
+#             max_original_size = float(max((w, h)))
+#             if max_original_size / min_original_size * size > max_size:
+#                 size = int(round(max_size * min_original_size / max_original_size))
+
+#         if (w <= h and w == size) or (h <= w and h == size):
+#             return (h, w)
+
+#         if w < h:
+#             ow = size
+#             oh = int(size * h / w)
+#         else:
+#             oh = size
+#             ow = int(size * w / h)
+
+#         return (oh, ow)
+
+#     def get_size(image_size, size, max_size=None):
+#         if isinstance(size, (list, tuple)):
+#             return size[::-1]
+#         else:
+#             return get_size_with_aspect_ratio(image_size, size, max_size)
+
+#     size = get_size(image.size, size, max_size)
+#     rescaled_image = F.resize(image, size)
+
+#     if target is None:
+#         return rescaled_image, None
+
+#     ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(rescaled_image.size, image.size))
+#     ratio_width, ratio_height = ratios
+
+#     target = target.copy()
+#     if "boxes" in target:
+#         boxes = target["boxes"]
+#         scaled_boxes = boxes * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height])
+#         target["boxes"] = scaled_boxes
+
+#     if "area" in target:
+#         area = target["area"]
+#         scaled_area = area * (ratio_width * ratio_height)
+#         target["area"] = scaled_area
+
+#     h, w = size
+#     target["size"] = torch.tensor([h, w])
+
+#     if "masks" in target:
+#         target['masks'] = interpolate(
+#             target['masks'][:, None].float(), size, mode="nearest")[:, 0] > 0.5
+
+#     return rescaled_image, target
+
+
+
 def resize(image, target, size, max_size=None):
     # size can be min_size (scalar) or (w, h) tuple
 
@@ -230,10 +290,15 @@ def resize(image, target, size, max_size=None):
         return (oh, ow)
 
     def get_size(image_size, size, max_size=None):
-        if isinstance(size, (list, tuple)):
-            return size[::-1]
+        # if isinstance(size, (list, tuple)):
+        #     return size[::-1]
+        # else:
+        #     return get_size_with_aspect_ratio(image_size, size, max_size)
+        assert len(size)==2, "shape of size is (h,w)"
+        if image_size[0] > image_size[1]:
+            return (min(size), max(size))
         else:
-            return get_size_with_aspect_ratio(image_size, size, max_size)
+            return (max(size), min(size))
 
     size = get_size(image.size, size, max_size)
     rescaled_image = F.resize(image, size)
@@ -243,6 +308,7 @@ def resize(image, target, size, max_size=None):
 
     ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(rescaled_image.size, image.size))
     ratio_width, ratio_height = ratios
+
 
     target = target.copy()
     if "boxes" in target:
@@ -263,6 +329,8 @@ def resize(image, target, size, max_size=None):
             target['masks'][:, None].float(), size, mode="nearest")[:, 0] > 0.5
 
     return rescaled_image, target
+
+
 
 
 def pad(image, target, padding):

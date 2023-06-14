@@ -59,10 +59,10 @@ class DanceDataset(Dataset):
         return len(self.indices)       
     
     def __getitem__(self, idx):
-        (pre_vid, pre_f_index), (vid, f_index)= self.indices[idx]
+        (pre_vid, pre_f_index), (cur_vid, cur_f_index)= self.indices[idx]
 
         pre_images, pre_targets = self.load_image(pre_vid, pre_f_index)
-        cur_images, cur_targets = self.load_image(pre_vid, pre_f_index)
+        cur_images, cur_targets = self.load_image(cur_vid, cur_f_index)
 
         if self.transform is not None:
             pre_images, pre_targets = self.transform(pre_images, pre_targets)
@@ -128,14 +128,14 @@ class DanceDataset(Dataset):
                 #     ])
                 # ),
                 # T.MOTHSV(),
-                T.RandomResize([960]),
+                T.RandomResize([(360, 640)]),
                 normalize,
             ])
 
         if image_set == 'val':
             return T.Compose([
                 # T.MotRandomResize([800], max_size=1333),
-                T.RandomResize([960]),
+                T.RandomResize([(360, 640)]),
                 normalize,
             ])
 
@@ -159,6 +159,8 @@ if __name__ == "__main__":
     data_dir = r"E:\work\code\motrv2\data\DanceTrack"
     data_set = DanceDataset(data_dir, image_set="train")
     test_loader = DataLoader(dataset=data_set, batch_size=2, collate_fn=mot_collate_fn, shuffle=True, num_workers=0, drop_last=False)
+    # test_loader = DataLoader(dataset=data_set, batch_size=2, shuffle=True, num_workers=0, drop_last=False)
+
     # for i in range(1):
     #     print(data[i])
     for data in test_loader:
@@ -166,4 +168,4 @@ if __name__ == "__main__":
         cur_images = data['cur_images']
         pre_target = data['pre_targets']
         cur_target = data['cur_targets']
-        print(pre_imgs[0].shape, cur_images[1].shape, pre_target, cur_target)
+        print(pre_imgs[0].shape, cur_images[1].shape,) # pre_target, cur_target)
