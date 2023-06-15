@@ -44,10 +44,10 @@ class DanceDataset(Dataset):
                     continue
                 if label in [3, 4, 5, 6, 9, 10, 11]:  # Non-person
                     continue
-                else:
-                    crowd = False
+                # else:
+                #     crowd = False
                 x, y, w, h = map(float, (xywh))
-                self.all_labels[vid][t][i].append([x, y, x+w, y+h, crowd])
+                self.all_labels[vid][t][i].append([x, y, x+w, y+h])
                 # self.all_labels[vid][t] = [x, y, w, h, i]
                 if pre_frame:
                     self.indices.append((pre_frame, (vid, t)))
@@ -62,7 +62,7 @@ class DanceDataset(Dataset):
         (pre_vid, pre_f_index), (cur_vid, cur_f_index)= self.indices[idx]
 
         pre_images, pre_targets = self.load_image(pre_vid, pre_f_index)
-        cur_images, cur_targets = self.load_image(cur_vid, cur_f_index)
+        cur_images, cur_targets = self.load_image(cur_vid, cur_f_index, pre_targets["obj_ids"])
 
         if self.transform is not None:
             pre_images, pre_targets = self.transform(pre_images, pre_targets)
@@ -75,7 +75,7 @@ class DanceDataset(Dataset):
             'cur_targets': cur_targets,
         }
     
-    def load_image(self, vid, idx: int):
+    def load_image(self, vid, idx: int, pre_obj_ids=None):
         img_path = os.path.join(self.root_dir, vid, 'img1', f'{idx:08d}.jpg')
         img = Image.open(img_path)
         targets = {}
@@ -84,22 +84,29 @@ class DanceDataset(Dataset):
         # obj_idx_offset = self.video_dict[vid] * 100000  # 100000 unique ids is enough for a video.
 
         targets['boxes'] = []
-        targets['iscrowd'] = []
-        targets['labels'] = []
         targets['obj_ids'] = []
         targets['scores'] = []
         targets['image_id'] = torch.as_tensor(idx)
         targets['size'] = torch.as_tensor([h, w])
         targets['orig_size'] = torch.as_tensor([h, w])
-        for id in self.all_labels[vid][idx]:
-            for *xywh, crowd in self.all_labels[vid][idx][id]:
-                targets['boxes'].append(xywh)
-                targets['iscrowd'].append(crowd)
-                targets['labels'].append(0)
-                targets['obj_ids'].append(id)
-                targets['scores'].append(1.)
-        targets['iscrowd'] = torch.as_tensor(targets['iscrowd'])
-        targets['labels'] = torch.as_tensor(targets['labels'])
+        if pre_obj_ids is None:
+            for id in self.all_labels[vid][idx]:
+                for xywh in self.all_labels[vid][idx][id]:
+                    targets['boxes'].append(xywh)
+                    targets['obj_ids'].append(id)
+                    targets['scores'].append(1.)
+        else:
+            for id in pre_obj_ids.numpy():
+                if  id in  self.all_labels[vid][idx]:
+                    for xywh in self.all_labels[vid][idx][id]:
+                        targets['boxes'].append(xywh)
+                        targets['obj_ids'].append(id)
+                        targets['scores'].append(1.)
+                else:
+                    targets['boxes'].append([0,0,0,0])
+                    targets['obj_ids'].append(id)
+                    targets['scores'].append(0.0)
+
         targets['obj_ids'] = torch.as_tensor(targets['obj_ids'], dtype=torch.float32)
         targets['scores'] = torch.as_tensor(targets['scores'])
         targets['boxes'] = torch.as_tensor(targets['boxes'], dtype=torch.float32).reshape(-1, 4)
