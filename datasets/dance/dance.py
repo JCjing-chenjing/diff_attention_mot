@@ -6,8 +6,8 @@ from torch.utils.data import DataLoader
 #from torchvision import  transforms
 from collections import defaultdict
 from PIL import Image, ImageDraw
-# import datasets.transforms as T
-import transforms as T
+import datasets.dance.transforms as T
+# import transforms as T
 
 class DanceDataset(Dataset):
     def __init__(self, root_dir, image_set="train", transform=None):
@@ -68,13 +68,15 @@ class DanceDataset(Dataset):
             pre_images, pre_targets = self.transform(pre_images, pre_targets)
             cur_images, cur_targets = self.transform(cur_images, cur_targets)
  
-        return {
-            'pre_imgs': pre_images, 
-            "cur_images": cur_images,
-            'pre_targets': pre_targets,
-            'cur_targets': cur_targets,
-        }
-    
+        # return {
+        #     'pre_imgs': pre_images, 
+        #     "cur_images": cur_images,
+        #     'pre_targets': pre_targets,
+        #     'cur_targets': cur_targets,
+        # }
+
+        return pre_images, cur_images, pre_targets, cur_targets
+
     def load_image(self, vid, idx: int, pre_obj_ids=None):
         img_path = os.path.join(self.root_dir, vid, 'img1', f'{idx:08d}.jpg')
         img = Image.open(img_path)
