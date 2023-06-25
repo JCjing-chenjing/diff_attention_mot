@@ -24,7 +24,7 @@ def parse_opt():
 
 
     parser.add_argument('--data_type', type=str, default="dance", choices=['dance'],  help='数据格式')
-    parser.add_argument('--source', type=str, default=r"E:\work\code\motrv2\data\DanceTrack", help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--source', type=str, default=r"C:\Users\Administrator\Desktop\dancetrack_data", help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--mode', type=str, default="train", choices=['train', 'test'], help='数据格式')
     parser.add_argument('--batch_size', type=int, default=1, help='total batch size for all GPUs')
     parser.add_argument('--total_epochs', type=int, default=20, help='epoches')
@@ -88,11 +88,14 @@ def main(opts):
     save_dir = get_save_dir(opts.project, opts.resume)
     kwargs_data={'batch_size':opts.batch_size}
     train_dataset, train_loader = build_dataset(opts.data_type, opts.source, mode='train',**kwargs_data)
-    dataset_val, val_loader = build_dataset(opts.data_type, opts.source, mode='val',**kwargs_data)
+    # dataset_val, val_loader = build_dataset(opts.data_type, opts.source, mode='val',**kwargs_data)
     model = build_model(opts.model_name, opts).to(device)
 
     model = torch.nn.DataParallel(model)  # DP 模式
     optimizer = build_optimizer(opts.optim_name,model,opts.lr)
+
+
+
     criterion=build_loss('detr_loss',opts)
 
     for epoch in range(opts.total_epochs):
@@ -113,7 +116,7 @@ def main(opts):
 
                 outputs={"pred_logits":pred_logits,"pred_boxes":pred_boxes}
 
-                # loss_dict = criterion(outputs, pre_target)
+                # loss_dict = criterion(outputs, cur_targets)
 
                 print(pred_boxes.shape)
                 optimizer.zero_grad()

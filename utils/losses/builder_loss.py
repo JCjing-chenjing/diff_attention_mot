@@ -37,4 +37,14 @@ def build_loss(loss_name,args=None, **kwargs):
         criteria = SetCriterion(args.num_classes, matcher=matcher, weight_dict=weight_dict,
                                  eos_coef=args.eos_coef, losses=losses)
 
+    elif loss_name=='general_loss':
+        from utils.losses.general_loss import loss
+
+
+
+
+
+
+
+
     return criteria
