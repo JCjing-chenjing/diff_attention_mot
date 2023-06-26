@@ -24,7 +24,7 @@ def parse_opt():
 
 
     parser.add_argument('--data_type', type=str, default="dance", choices=['dance'],  help='数据格式')
-    parser.add_argument('--source', type=str, default=r"C:\Users\Administrator\Desktop\dancetrack_data", help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--source', type=str, default=r"C:\Users\Administrator\Desktop\dance", help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--mode', type=str, default="train", choices=['train', 'test'], help='数据格式')
     parser.add_argument('--batch_size', type=int, default=1, help='total batch size for all GPUs')
     parser.add_argument('--total_epochs', type=int, default=20, help='epoches')
@@ -41,6 +41,16 @@ def parse_opt():
     parser.add_argument('--imgsz', '--img', '--img_size', nargs='+', type=int, default=[(1280, 720)], help='inference size h,w')
     parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--project', default=ROOT / 'runs/train', help='save results to project/name')
+
+    parser.add_argument('--loss_name', type=str, default="general_loss", choices=['general_loss'], help='loss的选择')
+
+
+    #check
+    parser.add_argument('--save_period', type=int, default=1, help='loss的选择')
+
+
+
+
 
 
     # * Matcher
@@ -80,6 +90,7 @@ from tqdm import tqdm
 from utils.losses.builder_loss import build_loss
 from datasets.builder_dataset import convert_data2device
 from utils.checkpoint.file_utils import get_save_dir
+from utils.checkpoint.checkpoint import save_ckpt
 
 
 def main(opts):
@@ -95,14 +106,15 @@ def main(opts):
     optimizer = build_optimizer(opts.optim_name,model,opts.lr)
 
 
-
-    criterion=build_loss('detr_loss',opts)
-
+    criterion=build_loss(opts.loss_name,opts)
+    max_iter=opts.total_epochs*len(train_loader)
+    best_score=0.0
     for epoch in range(opts.total_epochs):
         model.train()
         with tqdm(total=len(train_loader)) as pbar:
-            for pre_imgs, cur_images, pre_targets, cur_targets in train_loader:
+            for iter,data in enumerate(train_loader):
 
+                pre_imgs, cur_images, pre_targets, cur_targets=data
                 pre_imgs = pre_imgs.to(device)          #data['pre_imgs'].to(device)  #torch.stack(data['pre_imgs'], 0).to(device)   #
                 cur_images = cur_images.to(device)      #data['cur_images'].to(device)
                 # pre_target = pre_targets.to(device)     #data['pre_targets']
@@ -116,34 +128,36 @@ def main(opts):
 
                 outputs={"pred_logits":pred_logits,"pred_boxes":pred_boxes}
 
-                # loss_dict = criterion(outputs, cur_targets)
+                loss = criterion(outputs, cur_targets)
 
                 print(pred_boxes.shape)
                 optimizer.zero_grad()
 
-                # loss = criterion(outputs, labels)
-                # loss.backward()
-                # optimizer.step()
-                # np_loss = loss.detach().cpu().numpy()
-                # cur_iter = (epoch * len(train_loader)) + iter + 1
-                #
+
+                loss.backward()
+                optimizer.step()
+                np_loss = loss.detach().cpu().numpy()
+                cur_iter = (epoch * len(train_loader)) + iter + 1
+
                 # scheduler.step()
                 #
                 # #################### 打印信息控制############
-                # if (iter+1) % 100 == 0:
-                #     print('\tepoch: {}|{}\tloss:{}'.format(epoch + 1, iter + 1, np_loss))
-                # pbar.set_description("epoch {}|{}".format(opts.total_epochs, epoch + 1))
-                # pbar.set_postfix(iter_all='{}||{}'.format(max_iter, cur_iter),
-                #                  iter_epoch='{}||{}'.format(len(train_loader), iter + 1), loss=np_loss)
-                # pbar.update()
-                #
-                # break
+                if (iter+1) % 100 == 0:
+                    print('\tepoch: {}|{}\tloss:{}'.format(epoch + 1, iter + 1, np_loss))
+                pbar.set_description("epoch {}|{}".format(opts.total_epochs, epoch + 1))
+                pbar.set_postfix(iter_all='{}||{}'.format(max_iter, cur_iter),
+                                 iter_epoch='{}||{}'.format(len(train_loader), iter + 1), loss=np_loss)
+                pbar.update()
 
-            # save_ckpt(os.path.join(save_dir, 'last.pth'), model, optimizer, scheduler, epoch, best_miou)
-            # if (epoch) % opts.save_period == 0 and opts.save_period > 0:
-            #     pth_name = str(opts.model) + "_" + str(opts.backbone) + '_' + str(epoch+1) + '.pth'
-            #     save_ckpt(os.path.join(save_dir, pth_name), model, optimizer, scheduler, epoch, best_miou)
-            #
+                break
+
+            save_ckpt(os.path.join(save_dir, 'last.pth'), model, optimizer,  epoch, best_score)
+
+            if opts.save_period:
+                if (epoch) % opts.save_period == 0 and opts.save_period > 0:  # opts.save_period 保存一次
+                    pth_name = str(opts.model_name) + "_" + str(opts.data_type) + '_' + str(epoch+1) + '.pth'
+                    save_ckpt(os.path.join(save_dir, pth_name), model, optimizer, epoch, best_score)
+
             # if opts.val_period>0 and epoch%opts.val_period!=0:
             #     continue
             #

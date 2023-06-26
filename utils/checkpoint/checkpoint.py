@@ -1,16 +1,16 @@
 import torch
 
 
-def save_ckpt(path, model, optimizer, scheduler, epoch, best_miou, **kwargs):
+def save_ckpt(path, model, optimizer,  epoch, best_score, **kwargs):
     """
     save current model
     """
     save_info = {
         "model_state": model.module.state_dict(),
         "optimizer_state": optimizer.state_dict(),
-        "scheduler_state": scheduler.state_dict(),
+        # "scheduler_state": scheduler.state_dict(),
         "epoch": epoch,
-        "best_score": best_miou,
+        "best_score": best_score,
     }
     for k, v in kwargs.items():
         save_info[k] = v

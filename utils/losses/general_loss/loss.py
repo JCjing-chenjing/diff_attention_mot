@@ -2,7 +2,7 @@
 
 
 import torch.nn as nn
-
+import torch.nn.functional as F
 
 
 
@@ -21,14 +21,31 @@ import torch.nn as nn
 
 
 
-class General_Loss(nn.Module):
+class General_Loss():
 
     def __init__(self,num_class, **kwargs):
         self.cross=nn.CrossEntropyLoss()
         self.num_class=num_class
-    super
+        self.reduction='mean'  # sum mean none
 
 
+
+    def create_loss(self,outputs,targets):
+        pred_logits=outputs['pred_logits']
+        pred_boxes=outputs['pred_boxes']
+
+        device=pred_logits.device
+
+        boxes=targets['boxes'].to(device)
+        score=targets['scores'].to(device)
+        score_loss=self.cross(pred_logits[0],score[0].long())
+
+        box_loss=F.smooth_l1_loss(boxes, pred_boxes, reduction=self.reduction)
+
+
+
+        loss_result=score_loss+box_loss
+        return loss_result
 
 
 

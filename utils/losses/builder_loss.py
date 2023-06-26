@@ -38,9 +38,10 @@ def build_loss(loss_name,args=None, **kwargs):
                                  eos_coef=args.eos_coef, losses=losses)
 
     elif loss_name=='general_loss':
-        from utils.losses.general_loss import loss
+        from utils.losses.general_loss.loss import General_Loss
+        create_loss=General_Loss(args.num_classes)
 
-
+        criteria=create_loss.create_loss
 
 
 
