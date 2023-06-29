@@ -1,5 +1,5 @@
 from torch.utils.data import DataLoader
-from datasets.dance.dance import DanceDataset, mot_collate_fn
+from datasets.dance.dance import DanceDataset, collate_fn
 
 
 # 构建数据方法
@@ -10,7 +10,9 @@ def build_dataset(data_name=None,data_dir=None,mode='train',**kwargs):
         batch_size=kwargs.get('batch_size') if kwargs.get('batch_size') else 2
         num_workers = kwargs.get('num_workers') if kwargs.get('num_workers') else 0
         data_set= DanceDataset(data_dir, image_set=mode)
-        data_loader = DataLoader(dataset=data_set, batch_size=batch_size, #collate_fn=mot_collate_fn,
+        # data_loader = DataLoader(dataset=data_set, batch_size=batch_size, #collate_fn=mot_collate_fn,
+        #                          shuffle=True, num_workers=num_workers,  drop_last=False)
+        data_loader = DataLoader(dataset=data_set, batch_size=batch_size, collate_fn = collate_fn,
                                  shuffle=True, num_workers=num_workers,  drop_last=False)
 
     else:
@@ -24,6 +26,7 @@ def convert_data2device(target,data_name,device):
 
     if data_name=='dance':
         for k in list(target.keys()):
+
             target[k]=target[k].to(device)
     else:
         target=target.to(device)

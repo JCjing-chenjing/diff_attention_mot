@@ -23,18 +23,18 @@ def parse_opt():
     parser = argparse.ArgumentParser()
 
 
-    parser.add_argument('--data_type', type=str, default="dance", choices=['dance'],  help='数据格式')
-    parser.add_argument('--source', type=str, default=r"C:\Users\Administrator\Desktop\dance", help='file/dir/URL/glob, 0 for webcam')
-    parser.add_argument('--mode', type=str, default="train", choices=['train', 'test'], help='数据格式')
-    parser.add_argument('--batch_size', type=int, default=1, help='total batch size for all GPUs')
+    parser.add_argument('--data_type', type=str, default="dance", choices=['dance'],  help='data sets')
+    parser.add_argument('--source', type=str, default=r"E:\work\code\motrv2\data\DanceTrack", help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--mode', type=str, default="train", choices=['train', 'test'], help='data ')
+    parser.add_argument('--batch_size', type=int, default=2, help='total batch size for all GPUs')
     parser.add_argument('--total_epochs', type=int, default=20, help='epoches')
 
 
-    parser.add_argument('--optim_name', type=str, default="sgd", choices=['sgd'], help='optimizer的选择')
+    parser.add_argument('--optim_name', type=str, default="sgd", choices=['sgd'], help='optimizer')
     parser.add_argument('--lr', type=float, default=0.0001, help='lr')
-    parser.add_argument('--num_classes', type=int, default=2,  help='类别')
+    parser.add_argument('--num_classes', type=int, default=2,  help='number of boxes class')
 
-    parser.add_argument('--model_name', type=str, default="diff_track", choices=['resnet', 'diff_track'], help='模型选择')
+    parser.add_argument('--model_name', type=str, default="diff_track", choices=['resnet', 'diff_track'], help='Select Model')
     parser.add_argument('--weights', nargs='+', type=str, default='False', help='model path(s)')
     parser.add_argument('--resume', default=False, help='model path(s)')
 
@@ -42,36 +42,9 @@ def parse_opt():
     parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--project', default=ROOT / 'runs/train', help='save results to project/name')
 
-    parser.add_argument('--loss_name', type=str, default="general_loss", choices=['general_loss'], help='loss的选择')
+    parser.add_argument('--loss_name', type=str, default="general_loss", choices=['general_loss'], help='Select loss')
+    parser.add_argument('--save_period', type=int, default=1, help='eeight storage step size')
 
-
-    #check
-    parser.add_argument('--save_period', type=int, default=1, help='loss的选择')
-
-
-
-
-
-
-    # * Matcher
-    parser.add_argument('--set_cost_class', default=1, type=float,
-                        help="Class coefficient in the matching cost")
-    parser.add_argument('--set_cost_bbox', default=5, type=float,
-                        help="L1 box coefficient in the matching cost")
-    parser.add_argument('--set_cost_giou', default=2, type=float,
-                        help="giou box coefficient in the matching cost")
-
-    # * Loss coefficients
-    parser.add_argument('--mask_loss_coef', default=1, type=float)
-    parser.add_argument('--dice_loss_coef', default=1, type=float)
-    parser.add_argument('--bbox_loss_coef', default=5, type=float)
-    parser.add_argument('--giou_loss_coef', default=2, type=float)
-    parser.add_argument('--eos_coef', default=0.1, type=float,
-                        help="Relative classification weight of the no-object class")
-
-    # * Segmentation
-    parser.add_argument('--masks', action='store_true',
-                        help="Train segmentation head if the flag is provided")
     parser.add_argument('--dec_layers', default=6, type=int,
                         help="Number of decoding layers in the transformer")
 
@@ -80,8 +53,6 @@ def parse_opt():
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
 
     return opt
-
-
 
 
 
@@ -102,6 +73,7 @@ def main(opts):
     # dataset_val, val_loader = build_dataset(opts.data_type, opts.source, mode='val',**kwargs_data)
     model = build_model(opts.model_name, opts).to(device)
 
+    # model = torch.nn.DataParallel(model, device_ids=[0,1,2,3], output_device=0)
     model = torch.nn.DataParallel(model)  # DP 模式
     optimizer = build_optimizer(opts.optim_name,model,opts.lr)
 
@@ -114,13 +86,13 @@ def main(opts):
         with tqdm(total=len(train_loader)) as pbar:
             for iter,data in enumerate(train_loader):
 
-                pre_imgs, cur_images, pre_targets, cur_targets=data
-                pre_imgs = pre_imgs.to(device)          #data['pre_imgs'].to(device)  #torch.stack(data['pre_imgs'], 0).to(device)   #
-                cur_images = cur_images.to(device)      #data['cur_images'].to(device)
+                # pre_imgs, cur_images, pre_targets, cur_targets = data
+                pre_imgs = data["pre_images"].to(device)          #data['pre_imgs'].to(device)  #torch.stack(data['pre_imgs'], 0).to(device)   #
+                cur_images = data["cur_images"].to(device)      #data['cur_images'].to(device)
                 # pre_target = pre_targets.to(device)     #data['pre_targets']
                 # cur_target = cur_targets.to(device)     #data['cur_targets']
-                pre_targets = convert_data2device(pre_targets,opts.data_type,device)
-                cur_targets = convert_data2device(cur_targets, opts.data_type, device)
+                pre_targets = convert_data2device(data["pre_targets"], opts.data_type, device)
+                cur_targets = convert_data2device(data["cur_targets"], opts.data_type, device)
 
                 # detect_box = [b['boxes'].to(device) for b in pre_targets]
 
@@ -130,7 +102,7 @@ def main(opts):
 
                 loss = criterion(outputs, cur_targets)
 
-                print(pred_boxes.shape)
+                # print(pred_boxes.shape)
                 optimizer.zero_grad()
 
 
@@ -149,7 +121,7 @@ def main(opts):
                                  iter_epoch='{}||{}'.format(len(train_loader), iter + 1), loss=np_loss)
                 pbar.update()
 
-                break
+                # break
 
             save_ckpt(os.path.join(save_dir, 'last.pth'), model, optimizer,  epoch, best_score)
 

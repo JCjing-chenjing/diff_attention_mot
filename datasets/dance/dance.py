@@ -68,14 +68,14 @@ class DanceDataset(Dataset):
             pre_images, pre_targets = self.transform(pre_images, pre_targets)
             cur_images, cur_targets = self.transform(cur_images, cur_targets)
  
-        # return {
-        #     'pre_imgs': pre_images, 
-        #     "cur_images": cur_images,
-        #     'pre_targets': pre_targets,
-        #     'cur_targets': cur_targets,
-        # }
+        return {
+            'pre_images': pre_images, 
+            "cur_images": cur_images,
+            'pre_targets': pre_targets,
+            'cur_targets': cur_targets,
+        }
 
-        return pre_images, cur_images, pre_targets, cur_targets
+        # return pre_images, cur_images, pre_targets, cur_targets
 
     def load_image(self, vid, idx: int, pre_obj_ids=None):
         img_path = os.path.join(self.root_dir, vid, 'img1', f'{idx:08d}.jpg')
@@ -88,7 +88,7 @@ class DanceDataset(Dataset):
         targets['boxes'] = []
         targets['obj_ids'] = []
         targets['scores'] = []
-        targets['image_id'] = torch.as_tensor(idx)
+        # targets['image_id'] = torch.as_tensor(idx)
         targets['size'] = torch.as_tensor([h, w])
         targets['orig_size'] = torch.as_tensor([h, w])
         if pre_obj_ids is None:
@@ -159,6 +159,46 @@ def mot_collate_fn(batch: List[dict]) -> dict:
         ret_dict[key] = [img_info[key] for img_info in batch]
         if len(ret_dict[key]) == 1:
             ret_dict[key] = ret_dict[key][0]
+    return ret_dict
+
+def collate_fn(batch):
+    ret_dict = {}
+    for key in list(batch[0].keys()):
+        # assert not isinstance(batch[0][key], torch.Tensor)
+        ret_dict[key] = [img_info[key] for img_info in batch]
+        if len(ret_dict[key]) == 1:                                             #batch_size = 1
+            if isinstance(ret_dict[key][0], torch.Tensor):
+                ret_dict[key] = ret_dict[key][0].unsqueeze(0)      
+            elif isinstance(ret_dict[key][0], dict):
+                sub_dict = {}
+                for sub_k in ret_dict[key][0].keys():
+                    sub_dict[sub_k] = ret_dict[key][0][sub_k].unsqueeze(0)  if isinstance(ret_dict[key][0][sub_k], torch.Tensor) else ret_dict[key][0][sub_k]
+                ret_dict[key] = sub_dict
+            else:
+                ret_dict[key] = ret_dict[key][0]
+        else:                                                                   #batch_size > 1
+            if isinstance(ret_dict[key][0], dict):
+                sub_dict = {}
+                for sub_k in  ret_dict[key][0].keys(): 
+                    sub_dict[sub_k] = [sub_info[sub_k] for sub_info in ret_dict[key]]
+                
+                for sub_k in sub_dict:
+                    max_shape = [(data.shape) for data in sub_dict[sub_k]]
+                    max_shape = max(max_shape)
+                    if not len(max_shape):
+                        continue
+                    tmp_data_list = []
+                    for data in sub_dict[sub_k]:
+                        tmp_data = torch.zeros(max_shape)
+                        n = data.shape
+                        tmp_data[:n[0]] = data
+                        tmp_data_list.append(tmp_data)
+                    sub_dict[sub_k] = torch.stack(tmp_data_list, 0)
+                ret_dict[key] = sub_dict
+            else:
+                ret_dict[key] = torch.stack(ret_dict[key], 0)
+
+        
     return ret_dict
 
 
