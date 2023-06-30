@@ -10,12 +10,13 @@ import datasets.dance.transforms as T
 # import transforms as T
 
 class DanceDataset(Dataset):
-    def __init__(self, root_dir, image_set="train", transform=None):
-        # self.args = args
+    def __init__(self, args, image_set="train", transform=None):
+        self.args = args
+        self.img_size = args.img_size
         if transform is None:
             transform = self.get_transforms(image_set)
         self.transform = transform
-        self.root_dir = os.path.join(root_dir, image_set)
+        self.root_dir = os.path.join(args.source, image_set)
         self.all_labels = defaultdict(lambda : defaultdict( lambda: defaultdict(list)))
         # self.all_labels = defaultdict(lambda : defaultdict(list))
         self.indices = []
@@ -137,14 +138,17 @@ class DanceDataset(Dataset):
                 #     ])
                 # ),
                 # T.MOTHSV(),
-                T.RandomResize([(360, 640)]),
+                # T.RandomResize([(360, 640)]),
+                T.RandomResize(self.img_size),
                 normalize,
             ])
 
         if image_set == 'val':
             return T.Compose([
                 # T.MotRandomResize([800], max_size=1333),
-                T.RandomResize([(360, 640)]),
+                # T.RandomResize([(360, 640)]),
+                T.RandomResize(self.img_size),
+                
                 normalize,
             ])
 
