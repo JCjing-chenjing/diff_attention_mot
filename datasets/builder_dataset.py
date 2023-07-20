@@ -26,10 +26,11 @@ def convert_data2device(target,data_name,device):
 
     if data_name=='dance':
         for k in list(target.keys()):
-
+            if isinstance(target[k],str): continue
             target[k]=target[k].to(device)
     else:
-        target=target.to(device)
+        if not isinstance(target, str):
+            target=target.to(device)
 
     return target
 

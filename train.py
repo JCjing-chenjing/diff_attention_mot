@@ -19,12 +19,29 @@ from utils.envs.torch_utils import select_device
 
 
 
+
+
+from tqdm import tqdm
+
+from utils.losses.builder_loss import build_loss
+from datasets.builder_dataset import convert_data2device
+from utils.checkpoint.file_utils import get_save_dir
+from utils.checkpoint.checkpoint import save_ckpt
+
+
+
+
+
+
+
+
+
 def parse_opt():
     parser = argparse.ArgumentParser()
 
 
     parser.add_argument('--data_type', type=str, default="dance", choices=['dance'],  help='data sets')
-    parser.add_argument('--source', type=str, default=r"E:\work\code\motrv2\data\DanceTrack", help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--source', type=str, default=r"C:\Users\Administrator\Desktop\dance", help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--mode', type=str, default="train", choices=['train', 'test'], help='data ')
     parser.add_argument('--batch_size', type=int, default=1, help='total batch size for all GPUs')
     parser.add_argument('--num_workers', type=int, default=0, help='load data worker number')
@@ -56,12 +73,6 @@ def parse_opt():
 
 
 
-from tqdm import tqdm
-
-from utils.losses.builder_loss import build_loss
-from datasets.builder_dataset import convert_data2device
-from utils.checkpoint.file_utils import get_save_dir
-from utils.checkpoint.checkpoint import save_ckpt
 
 
 def main(args):
@@ -86,6 +97,7 @@ def main(args):
         with tqdm(total=len(train_loader)) as pbar:
             for iter,data in enumerate(train_loader):
 
+
                 # pre_imgs, cur_images, pre_targets, cur_targets = data
                 pre_imgs = data["pre_images"].to(device)            #data['pre_imgs'].to(device)  #torch.stack(data['pre_imgs'], 0).to(device)   #
                 cur_images = data["cur_images"].to(device)          #data['cur_images'].to(device)
@@ -102,7 +114,7 @@ def main(args):
 
                 loss = criterion(outputs, cur_targets)
 
-                # print(pred_boxes.shape)
+
                 optimizer.zero_grad()
 
 
@@ -112,7 +124,7 @@ def main(args):
                 cur_iter = (epoch * len(train_loader)) + iter + 1
 
                 # scheduler.step()
-                #
+
                 # #################### 打印信息控制############
                 if (iter+1) % 100 == 0:
                     print('\tepoch: {}|{}\tloss:{}'.format(epoch + 1, iter + 1, np_loss))
@@ -121,7 +133,7 @@ def main(args):
                                  iter_epoch='{}||{}'.format(len(train_loader), iter + 1), loss=np_loss)
                 pbar.update()
 
-                # break
+
 
             save_ckpt(os.path.join(save_dir, 'last.pth'), model, optimizer,  epoch, best_score)
 
@@ -129,6 +141,9 @@ def main(args):
                 if (epoch) % args.save_period == 0 and args.save_period > 0:  # opts.save_period 保存一次
                     pth_name = str(args.model_name) + "_" + str(args.data_type) + '_' + str(epoch+1) + '.pth'
                     save_ckpt(os.path.join(save_dir, pth_name), model, optimizer, epoch, best_score)
+
+
+
 
 
 

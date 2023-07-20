@@ -26,7 +26,10 @@ def get_save_dir(out_dir,resume=False):
 
 
 
-
+def build_dir(out_dir):
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir,exist_ok=True)
+    return out_dir
 
 
 

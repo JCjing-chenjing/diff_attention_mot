@@ -114,6 +114,9 @@ class DanceDataset(Dataset):
         targets['scores'] = torch.as_tensor(targets['scores'])
         targets['boxes'] = torch.as_tensor(targets['boxes'], dtype=torch.float32).reshape(-1, 4)
         # targets['boxes'][:, 2:] += targets['boxes'][:, :2]
+        targets['img_path']=img_path
+        targets['boxes_ori'] = torch.as_tensor(targets['boxes'], dtype=torch.float32).reshape(-1, 4)
+
         return img, targets
 
     
