@@ -1,95 +1,28 @@
 
-
-
-
-
-
-
-
-
-
-import sys
-import os
-
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-ROOT=os.path.dirname(__file__)
-# Run code
-from trackeval.eval import Evaluator
-from trackeval.datasets.mot_challenge_2d_box import MotChallenge2DBox
-from trackeval.metrics import HOTA, CLEAR, Identity, VACE
-
-
-
-
-def track_eval(trackers_folder,gt_folder,output_folder,seq_info):
-
-    config = {}
-
-    # config['TRACKERS_FOLDER'] = ROOT + '/trackeval/data/predect_mot'
-    # config['GT_FOLDER'] = ROOT + '/trackeval/data/mot17_gt'  # 给出gt路径
-    # config['OUTPUT_FOLDER'] = ROOT + '/trackeval/data/out_dir'
-
-    config['TRACKERS_FOLDER'] = trackers_folder
-    config['GT_FOLDER'] = gt_folder
-    config['OUTPUT_FOLDER'] = output_folder
-    config['SEQ_INFO']=seq_info
-
-
-    # 确定文件内gt.txt的路径，gt_folder=config['GT_FOLDER']，seq为os.listdir(gt_folder)列表
-    config['GT_LOC_FORMAT'] = '{gt_folder}/{seq}/gt/gt.txt'
-    config['CLASSES_TO_EVAL'] = ['pedestrian']  # 确定预测指标的类别
-
-    dataset = MotChallenge2DBox(config)  # dataset_list是存放数据信息列表
-
-    evaluator = Evaluator()
-
-    metrics_config = {'METRICS': ['HOTA', 'CLEAR', 'Identity'], 'THRESHOLD': 0.5}
-    metrics_list = []
-    for metric in [HOTA, CLEAR, Identity, VACE]:
-        if metric.get_name() in metrics_config['METRICS']:
-            metrics_list.append(metric(metrics_config))
-    if len(metrics_list) == 0:
-        raise Exception('No metrics selected for evaluation')
-    evaluator.evaluate(dataset, metrics_list)
-
-
-
-
-
-
-import cv2
 import argparse
 import os
 import sys
 import torch
 from pathlib import Path
+from tqdm import tqdm
+
+# 指标评估依赖文件
+from trackeval.eval import Evaluator
+from trackeval.datasets.mot_challenge_2d_box import MotChallenge2DBox
+from trackeval.metrics import HOTA, CLEAR, Identity, VACE
+# 模型测试依赖文件
+from models.builder_model import build_model
+from utils.envs.env import init_seeds
+from utils.envs.torch_utils import select_device
+from datasets.general_data.predata import PreData
+from utils.checkpoint.file_utils import get_save_dir
+from utils.checkpoint.checkpoint import load_ckpt
+
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
-from datasets.builder_dataset import build_dataset
-from models.builder_model import build_model
-
-from utils.envs.env import init_seeds
-from utils.envs.torch_utils import select_device
-
-
-from datasets.general_data.predata import PreData
-
-
-
-
-from tqdm import tqdm
-
-
-from utils.checkpoint.file_utils import get_save_dir
-
-from utils.checkpoint.checkpoint import load_ckpt
-
-
 
 
 
@@ -121,10 +54,6 @@ def parse_opt():
     args = parser.parse_args()
     return args
 
-
-
-
-
 def write_txt(text_lst,out_dir):
     '''
     每行内容为列表，将其写入text中
@@ -141,7 +70,6 @@ def model_predect(args):
     init_seeds()
     device = select_device(args.device, 1)  # 设置显卡
     save_dir = get_save_dir(args.project)
-
 
     model = build_model(args.model_name, args)
 
@@ -228,10 +156,56 @@ def model_predect(args):
 
 
 
+def track_eval(trackers_folder,gt_folder,output_folder,seq_info):
+
+    config = {}
+
+    # config['TRACKERS_FOLDER'] = ROOT + '/trackeval/data/predect_mot'
+    # config['GT_FOLDER'] = ROOT + '/trackeval/data/mot17_gt'  # 给出gt路径
+    # config['OUTPUT_FOLDER'] = ROOT + '/trackeval/data/out_dir'
+
+    config['TRACKERS_FOLDER'] = trackers_folder
+    config['GT_FOLDER'] = gt_folder
+    config['OUTPUT_FOLDER'] = output_folder
+    config['SEQ_INFO']=seq_info
+
+
+    # 确定文件内gt.txt的路径，gt_folder=config['GT_FOLDER']，seq为os.listdir(gt_folder)列表
+    config['GT_LOC_FORMAT'] = '{gt_folder}/{seq}/gt/gt.txt'
+    config['CLASSES_TO_EVAL'] = ['pedestrian']  # 确定预测指标的类别
+
+    dataset = MotChallenge2DBox(config)  # dataset_list是存放数据信息列表
+
+    evaluator = Evaluator()
+
+    metrics_config = {'METRICS': ['HOTA', 'CLEAR', 'Identity'], 'THRESHOLD': 0.5}
+    metrics_list = []
+    for metric in [HOTA, CLEAR, Identity, VACE]:
+        if metric.get_name() in metrics_config['METRICS']:
+            metrics_list.append(metric(metrics_config))
+    if len(metrics_list) == 0:
+        raise Exception('No metrics selected for evaluation')
+    evaluator.evaluate(dataset, metrics_list)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def main():
-
 
     args = parse_opt()
     predect_path,seq_info=model_predect(args)
