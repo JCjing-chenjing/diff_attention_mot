@@ -16,24 +16,11 @@ from utils.optim.builder_optimizer import build_optimizer
 from utils.envs.env import init_seeds
 from utils.envs.torch_utils import select_device
 
-
-
-
-
-
 from tqdm import tqdm
-
 from utils.losses.builder_loss import build_loss
 from datasets.builder_dataset import convert_data2device
 from utils.checkpoint.file_utils import get_save_dir
 from utils.checkpoint.checkpoint import save_ckpt
-
-
-
-
-
-
-
 
 
 def parse_opt():
@@ -41,7 +28,7 @@ def parse_opt():
 
 
     parser.add_argument('--data_type', type=str, default="dance", choices=['dance'],  help='data sets')
-    parser.add_argument('--source', type=str, default=r"C:\Users\Administrator\Desktop\dance", help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--source', type=str, default="/Data/cj/test_redis/DanceTrack/", help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--mode', type=str, default="train", choices=['train', 'test'], help='data ')
     parser.add_argument('--batch_size', type=int, default=1, help='total batch size for all GPUs')
     parser.add_argument('--num_workers', type=int, default=0, help='load data worker number')

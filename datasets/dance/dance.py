@@ -82,7 +82,7 @@ class DanceDataset(Dataset):
         img_path = os.path.join(self.root_dir, vid, 'img1', f'{idx:08d}.jpg')
         img = Image.open(img_path)
         targets = {}
-        w, h = img._size
+        w, h = img.size
         assert w > 0 and h > 0, "invalid image {} with shape {} {}".format(img_path, w, h)
         # obj_idx_offset = self.video_dict[vid] * 100000  # 100000 unique ids is enough for a video.
 

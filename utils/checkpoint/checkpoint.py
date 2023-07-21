@@ -53,8 +53,6 @@ def load_priormodel_ckpt(ckpt_path, model):
     return model
 
 
-
-
 def load_resume_ckpt(ckpt_path, model):
     '''
     resume方式载入权重，必须保持权重与ckpt对应一致的变量和shape的值

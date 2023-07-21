@@ -147,11 +147,7 @@ def model_predect(args):
 
         write_txt(predect_info_lst,os.path.join(save_dir,k+'.txt'))
 
-
-
     print('predect txt path:{}'.format(save_dir))
-
-
     return save_dir,file_name_lst
 
 
@@ -188,39 +184,13 @@ def track_eval(trackers_folder,gt_folder,output_folder,seq_info):
     evaluator.evaluate(dataset, metrics_list)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def main():
-
     args = parse_opt()
     predect_path,seq_info=model_predect(args)
-
-
     track_eval(predect_path,args.source, predect_path,seq_info)
 
 
-
-
-
-
 if __name__ == "__main__":
-
-
     main()
 
 

@@ -7,8 +7,6 @@ import numpy as np
 
 
 class PreData():
-
-
     def __init__(self,
                  data_dir,
                  type='dance',
@@ -109,7 +107,7 @@ class PreData():
         ratio_width, ratio_height = ratios
         resize_w,resize_h=self.img_size
 
-        resize_boxes = torch.as_tensor(boxes_xywh) * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height])
+        resize_boxes = torch.as_tensor(boxes_xywh, dtype=torch.float32) * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height], dtype=torch.float32)
         resize_boxes = resize_boxes / torch.tensor([resize_w, resize_h, resize_w, resize_h], dtype=torch.float32)
         data_dict['frame_id'] = frame_id
         data_dict['track_id'] = track_id
