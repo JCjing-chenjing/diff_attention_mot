@@ -2,11 +2,14 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-from utils.losses.detr_loss.box_ops import generalized_box_iou,box_cxcywh_to_xyxy
-
+# from utils.losses.detr_loss.box_ops import generalized_box_iou,box_cxcywh_to_xyxy
+from utils.losses.detr_loss import box_ops
 from utils.losses.detr_loss.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, get_world_size, interpolate,
                        is_dist_avail_and_initialized)
+
+
+
 
 class SetCriterion(nn.Module):
     """ This class computes the loss for DETR.
@@ -14,6 +17,7 @@ class SetCriterion(nn.Module):
         1) we compute hungarian assignment between ground truth boxes and the outputs of the model
         2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
     """
+
     def __init__(self, num_classes, matcher, weight_dict, eos_coef, losses):
         """ Create the criterion.
         Parameters:
@@ -28,7 +32,7 @@ class SetCriterion(nn.Module):
         self.matcher = matcher
         self.weight_dict = weight_dict
         self.eos_coef = eos_coef
-        self.losses = losses
+        self.losses_task = losses
         empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer('empty_weight', empty_weight)
@@ -38,20 +42,33 @@ class SetCriterion(nn.Module):
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
         assert 'pred_logits' in outputs
-        src_logits = outputs['pred_logits']
+        src_logits = outputs['pred_logits']  # 只获得类别预测结果，[2,100,5]
 
-        idx = self._get_src_permutation_idx(indices)
-        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(src_logits.shape[:2], self.num_classes,
-                                    dtype=torch.int64, device=src_logits.device)
-        target_classes[idx] = target_classes_o
+        idx = self._get_src_permutation_idx(indices)  # idx为tuple(tensor([0,1]),tensor([67,79]))
+        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])  # 获得对应gt的类别,为[1,2]
+        """
+        # 说明，coco类别id是1开始的，假如有三个类,名称为[dog,cat,pig],batch=2,那么参数num_classes=4，表示3个类+1个背景，
+        模型输出src_logits=[2,100,5]会多出一个预测，target_classes设置为[2,100]，其值为4(该值就是背景，而有类别值为1、2、3),
+        那么target_classes中没有值为0，我理解模型不对0类做任何操作，是个无效值，模型只对1、2、3、4进行loss计算，然4为背景会比较多，
+        作者使用权重0.1避免其背景过度影响。
 
+        """
+
+        target_classes = torch.full(src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device)
+
+        # 该部分就是论文所说使用某种方式将gt也变成100的方式，赋值标签id，第一类的标签为1，以此类推
+        target_classes[idx] = target_classes_o  # 将对应idx赋值，即[0,67]位置为1，[1，79]位置为2，其它赋值任为4
+        # src_logits.transpose(1, 2) 变为[2,5,100],而target_classes变为[2,100]
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+
+        loss_ce = loss_ce*self.weight_dict['loss_ce'] if 'loss_ce' in self.weight_dict.keys() else loss_ce
         losses = {'loss_ce': loss_ce}
 
         if log:
             # TODO this should probably be a separate loss, not hacked in this one here
             losses['class_error'] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
+
+
         return losses
 
     @torch.no_grad()
@@ -59,12 +76,13 @@ class SetCriterion(nn.Module):
         """ Compute the cardinality error, ie the absolute error in the number of predicted non-empty boxes
         This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients
         """
-        pred_logits = outputs['pred_logits']
+        pred_logits = outputs['pred_logits']  # 获得类别预测[2,100,5]
         device = pred_logits.device
-        tgt_lengths = torch.as_tensor([len(v["labels"]) for v in targets], device=device)
+        tgt_lengths = torch.as_tensor([len(v["labels"]) for v in targets], device=device)  # 获得每个图box数量为一维张量[1,1]
         # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (pred_logits.argmax(-1) != pred_logits.shape[-1] - 1).sum(1)
-        card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())
+        # 最后一个值为4表示没有值
+        card_pred = (pred_logits.argmax(-1) != pred_logits.shape[-1] - 1).sum(1)  # 每张图对应预测pre=100没有目标判断
+        card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())  # 数量做了L1 loss
         losses = {'cardinality_error': card_err}
         return losses
 
@@ -74,19 +92,26 @@ class SetCriterion(nn.Module):
            The target boxes are expected in format (center_x, center_y, w, h), normalized by the image size.
         """
         assert 'pred_boxes' in outputs
-        idx = self._get_src_permutation_idx(indices)
-        src_boxes = outputs['pred_boxes'][idx]
-        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
-
-        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
+        idx = self._get_src_permutation_idx(indices)  # 这里与labels一致
+        src_boxes = outputs['pred_boxes'][idx]  # outputs['pred_boxes']为[2,100,4],通过idx索引获得对应预测box，[2,4]
+        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)  # 获得对应gt box，[2,4]
+        # 这里说明下gt box就是对应中心点与宽高(与yolov5数据txt一样)，并与预测box直接求loss
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')  # 做了L1 LOSS，输出维度[2,4]
 
         losses = {}
-        losses['loss_bbox'] = loss_bbox.sum() / num_boxes
+        losses['loss_bbox'] = loss_bbox.sum() / num_boxes  # 求和并除以box总数
 
-        loss_giou = 1 - torch.diag(generalized_box_iou(
-            box_cxcywh_to_xyxy(src_boxes),
-            box_cxcywh_to_xyxy(target_boxes)))
-        losses['loss_giou'] = loss_giou.sum() / num_boxes
+        if 'loss_bbox' in self.weight_dict.keys():
+            losses['loss_bbox'] = losses['loss_bbox'] * self.weight_dict['loss_bbox']
+
+        # 这一步是giou loss
+        loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
+            box_ops.box_cxcywh_to_xyxy(src_boxes),
+            box_ops.box_cxcywh_to_xyxy(target_boxes)))
+        losses['loss_giou'] = loss_giou.sum() / num_boxes  # 求和并除以box总数
+        if 'loss_giou' in self.weight_dict.keys():
+            losses['loss_giou'] = losses['loss_giou'] * self.weight_dict['loss_giou']
+
         return losses
 
     def loss_masks(self, outputs, targets, indices, num_boxes):
@@ -120,9 +145,9 @@ class SetCriterion(nn.Module):
 
     def _get_src_permutation_idx(self, indices):
         # permute predictions following indices
-        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
-        src_idx = torch.cat([src for (src, _) in indices])
-        return batch_idx, src_idx
+        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])  # 获得batch，即图像索引
+        src_idx = torch.cat([src for (src, _) in indices])  # 按顺序获得预测对应索引
+        return batch_idx, src_idx  # 输出图像索引与预测对应索引
 
     def _get_tgt_permutation_idx(self, indices):
         # permute targets following indices
@@ -138,7 +163,7 @@ class SetCriterion(nn.Module):
             'masks': self.loss_masks
         }
         assert loss in loss_map, f'do you really want to compute {loss} loss?'
-        return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
+        return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)  # 通过名称获得不同loss函数，但输入值都是一样的
 
     def forward(self, outputs, targets):
         """ This performs the loss computation.
@@ -148,12 +173,12 @@ class SetCriterion(nn.Module):
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
-
+        # outputs_without_aux获得pred_logits[2,100,5]和pred_boxes[2,100,4]
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
-        num_boxes = sum(len(t["labels"]) for t in targets)
+        num_boxes = sum(len(t["labels"]) for t in targets)  # 获得所有gt目标数量
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_boxes)
@@ -161,14 +186,14 @@ class SetCriterion(nn.Module):
 
         # Compute all the requested losses
         losses = {}
-        for loss in self.losses:
+        for loss in self.losses_task:  # labels,boxes,cardinality
             losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if 'aux_outputs' in outputs:
+        if 'aux_outputs' in outputs:  # 这里得到其它曾也向上面那样在做一次loss
             for i, aux_outputs in enumerate(outputs['aux_outputs']):
                 indices = self.matcher(aux_outputs, targets)
-                for loss in self.losses:
+                for loss in self.losses_task:
                     if loss == 'masks':
                         # Intermediate masks losses are too costly to compute, we ignore them.
                         continue
@@ -180,10 +205,9 @@ class SetCriterion(nn.Module):
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
-        return losses
+        losses_sum = sum([v for k, v in losses.items() if 'error' not in k])
 
-
-
+        return losses_sum
 
 
 def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
@@ -234,31 +258,30 @@ def dice_loss(inputs, targets, num_boxes):
 
 
 if __name__ == '__main__':
+
+    import torch
+    from models.obj_det.transformer_obj import TransformerDec
     from utils.losses.detr_loss.matcher import HungarianMatcher
-    from train import parse_opt
+    Model = TransformerDec(d_model=256, output_intermediate_dec=True, num_classes=4)
 
-    args = parse_opt()
-    num_classes=91
-    matcher=HungarianMatcher(cost_class=args.set_cost_class, cost_bbox=args.set_cost_bbox,
-                     cost_giou=args.set_cost_giou)
-    losses = ['labels', 'boxes', 'cardinality']
+    num_classes = 4   #  类别+1
+    matcher = HungarianMatcher(cost_class=1, cost_bbox=5, cost_giou=2)  # 二分匹配不同任务分配的权重
+    losses = ['labels', 'boxes', 'cardinality']  # 计算loss的任务
+    weight_dict = {'loss_ce': 1, 'loss_bbox': 5, 'loss_giou': 2}  # 为dert最后一个设置权重
+    criterion = SetCriterion(num_classes, matcher=matcher, weight_dict=weight_dict, eos_coef=0.1, losses=losses)
 
-    weight_dict = {'loss_ce': 1, 'loss_bbox': args.bbox_loss_coef}
-    weight_dict['loss_giou'] = args.giou_loss_coef
-    if args.masks:
-        weight_dict["loss_mask"] = 1
-        weight_dict["loss_dice"] = 1
-    # TODO this is a hack
+    # 下面使用iter，我构造了虚拟模型编码数据与数据加载标签数据
+    src = torch.rand((391, 2, 256))
+    pos_embed = torch.ones((391, 1, 256))
 
-    aux_weight_dict = {}
-    for i in range(args.dec_layers - 1):
-        aux_weight_dict.update({k + f'_{i}': v for k, v in weight_dict.items()})
-    weight_dict.update(aux_weight_dict)
+    # 创造真实target数据
+    target1 = {'boxes':torch.rand((5,4)),'labels':torch.tensor([1,3,2,1,2])}
+    target2 = {'boxes': torch.rand((3, 4)), 'labels': torch.tensor([1, 1, 2])}
+    target = [target1, target2]
 
-
-    criterion = SetCriterion(num_classes, matcher=matcher, weight_dict=weight_dict,
-                             eos_coef=args.eos_coef, losses=losses)
-
+    res = Model(src, pos_embed)
+    losses = criterion(res, target)
+    print(losses)
 
 
 

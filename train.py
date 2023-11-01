@@ -28,12 +28,12 @@ def parse_opt():
 
 
     parser.add_argument('--data_type', type=str, default="dance", choices=['dance'],  help='data sets')
-    parser.add_argument('--source', type=str, default="/Data/cj/test_redis/DanceTrack/", help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--source', type=str, default=r"D:\tracker\data\dance_try", help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--mode', type=str, default="train", choices=['train', 'test'], help='data ')
-    parser.add_argument('--batch_size', type=int, default=1, help='total batch size for all GPUs')
-    parser.add_argument('--num_workers', type=int, default=0, help='load data worker number')
+    parser.add_argument('--batch_size', type=int, default=2, help='total batch size for all GPUs')   #32
+    parser.add_argument('--num_workers', type=int, default=0, help='load data worker number')        #16
     
-    parser.add_argument('--total_epochs', type=int, default=20, help='epoches')
+    parser.add_argument('--total_epochs', type=int, default=200, help='epoches')
 
 
     parser.add_argument('--optim_name', type=str, default="sgd", choices=['sgd'], help='optimizer')
@@ -45,7 +45,7 @@ def parse_opt():
     parser.add_argument('--resume', default=False, help='model path(s)')
 
     parser.add_argument('--img_size',  type=list, default=[(720, 540)], help='inference size h,w')
-    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default=0, help='cuda device, i.e. 0 or 0,1,2,3 or cpu')  #'1,2'
     parser.add_argument('--project', default=ROOT / 'runs/train', help='save results to project/name')
 
     parser.add_argument('--loss_name', type=str, default="general_loss", choices=['general_loss'], help='Select loss')
@@ -78,13 +78,13 @@ def main(args):
 
     criterion=build_loss(args.loss_name,args)
     max_iter=args.total_epochs*len(train_loader)
-    best_score=0.0
+    best_score=9999
+   
     for epoch in range(args.total_epochs):
+        batch_loss = 0
         model.train()
         with tqdm(total=len(train_loader)) as pbar:
-            for iter,data in enumerate(train_loader):
-
-
+            for iter, data in enumerate(train_loader):
                 # pre_imgs, cur_images, pre_targets, cur_targets = data
                 pre_imgs = data["pre_images"].to(device)            #data['pre_imgs'].to(device)  #torch.stack(data['pre_imgs'], 0).to(device)   #
                 cur_images = data["cur_images"].to(device)          #data['cur_images'].to(device)
@@ -95,7 +95,7 @@ def main(args):
 
                 # detect_box = [b['boxes'].to(device) for b in pre_targets]
 
-                pred_logits,pred_boxes = model(pre_imgs, cur_images, pre_targets["boxes"])
+                pred_logits, pred_boxes = model(pre_imgs, cur_images, pre_targets["boxes"])
 
                 outputs={"pred_logits":pred_logits,"pred_boxes":pred_boxes}
 
@@ -111,10 +111,10 @@ def main(args):
                 cur_iter = (epoch * len(train_loader)) + iter + 1
 
                 # scheduler.step()
-
+                batch_loss += np_loss
                 # #################### 打印信息控制############
                 if (iter+1) % 100 == 0:
-                    print('\tepoch: {}|{}\tloss:{}'.format(epoch + 1, iter + 1, np_loss))
+                    print('\tepoch: {}|{}\tloss:{}'.format(epoch + 1, iter + 1, batch_loss/cur_iter))
                 pbar.set_description("epoch {}|{}".format(args.total_epochs, epoch + 1))
                 pbar.set_postfix(iter_all='{}||{}'.format(max_iter, cur_iter),
                                  iter_epoch='{}||{}'.format(len(train_loader), iter + 1), loss=np_loss)
@@ -123,16 +123,15 @@ def main(args):
 
 
             save_ckpt(os.path.join(save_dir, 'last.pth'), model, optimizer,  epoch, best_score)
-
-            if args.save_period:
-                if (epoch) % args.save_period == 0 and args.save_period > 0:  # opts.save_period 保存一次
-                    pth_name = str(args.model_name) + "_" + str(args.data_type) + '_' + str(epoch+1) + '.pth'
-                    save_ckpt(os.path.join(save_dir, pth_name), model, optimizer, epoch, best_score)
-
+            if best_score > batch_loss:
+                best_score = batch_loss
+                # pth_name = str(args.model_name) + "_" + str(args.data_type) + '_' + "be" + '.pth'
+                save_ckpt(os.path.join(save_dir, f'best_{epoch}.pth'), model, optimizer, epoch, best_score)
 
 
 
 
+            
 
 if __name__ == "__main__":
 

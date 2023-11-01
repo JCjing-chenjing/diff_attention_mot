@@ -13,79 +13,104 @@ class DanceDataset(Dataset):
     def __init__(self, args, image_set="train", transform=None):
         self.args = args
         self.img_size = args.img_size
+        self.image_set=image_set
         if transform is None:
             transform = self.get_transforms(image_set)
         self.transform = transform
         self.root_dir = os.path.join(args.source, image_set)
-        self.all_labels = defaultdict(lambda : defaultdict( lambda: defaultdict(list)))
-        # self.all_labels = defaultdict(lambda : defaultdict(list))
-        self.indices = []
-        self.read_all_labels()
-        
-        # if args.det_db:
-        #     with open(os.path.join(args.mot_path, args.det_db)) as f:
-        #         self.det_db = json.load(f)
-        # else:
-        #     self.det_db = defaultdict(list)
+        self.all_labels = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
-    def read_all_labels(self):
-        for vid in os.listdir(self.root_dir):
+        self.get_gt_labels()
+        if image_set=='train':
+            self.indices, self.file_count = self.get_indices()  # file_count为字典，记录每个文件夹数量
+        else:
+            # self.indices, self.file_count = self.get_indices_val()  # file_count为字典，记录每个文件夹数量
+            self.indices, self.file_count = self.get_indices()  # file_count为字典，记录每个文件夹数量
+
+
+
+    def get_gt_labels(self):
+        for vid in os.listdir(self.root_dir):  # 文件夹名字
             if 'seqmap' == vid:
                 continue
-            # vid = os.path.join(split_dir, vid)
-            # if 'DPM' in vid or 'FRCNN' in vid:
-            #     print(f'filter {vid}')
-            #     continue
+
             gt_path = os.path.join(self.root_dir, vid, 'gt', 'gt.txt')
-            pre_frame = None
+
             for l in open(gt_path):
-                t, i, *xywh, mark, label = l.strip().split(',')[:8]
-                t, i, mark, label = map(int, (t, i, mark, label))
-                if mark == 0:
+                frame_id, track_id, *xywh, mark, label = l.strip().split(',')[:8]  # t:frame_id、 track_id:轨迹id、xywh:左上角和高宽、mark:激活参数、label:类别
+                frame_id, track_id, mark, label = map(int, (frame_id, track_id, mark, label))
+                if mark == 0:  # 该目标不激活，要忽略
                     continue
-                if label in [3, 4, 5, 6, 9, 10, 11]:  # Non-person
+                if label in [3, 4, 5, 6, 9, 10, 11]:  # 对应类别种类
                     continue
-                # else:
-                #     crowd = False
+
                 x, y, w, h = map(float, (xywh))
-                self.all_labels[vid][t][i].append([x, y, x+w, y+h])
-                # self.all_labels[vid][t] = [x, y, w, h, i]
-                if pre_frame:
-                    self.indices.append((pre_frame, (vid, t)))
-                pre_frame = (vid, t)
+                self.all_labels[vid][frame_id][track_id].append([x, y, x+w, y+h])
+    def get_indices(self):
+        indices = []
+        file_count = {}
+        for k, v in self.all_labels.items():
+            frame_ids = sorted(list(set(tuple(v.keys()))))
+            frame_count = len(frame_ids)-1
+            for i in range(frame_count):
+                indices.append(((k, frame_ids[i]), (k, frame_ids[i+1])))
+            file_count[k] = frame_count
+        return indices,file_count
+
+    def get_indices_val(self):
+        indices = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        file_count = {}
+        for k, v in self.all_labels.items():
+            frame_ids = sorted(list(set(tuple(v.keys()))))
+            frame_count = len(frame_ids)-1
+            for i in range(frame_count):
+                indices[k][i] = (frame_ids[i], frame_ids[i+1])
+            file_count[k] = frame_count
+        return indices, file_count
   
 
 
     def __len__(self):
-        return len(self.indices)       
+
+        return np.sum(list(self.file_count.values()))
     
     def __getitem__(self, idx):
-        (pre_vid, pre_f_index), (cur_vid, cur_f_index)= self.indices[idx]
+        (pre_vid, pre_f_index), (cur_vid, cur_f_index) = self.indices[idx]
+        assert pre_vid == cur_vid, "Unrelated before and after frames!"
+        result_data = self.data_process(pre_vid, pre_f_index, cur_vid, cur_f_index)
+        return result_data
 
+    def val_getitem(self, vid,idx):
+
+        pre_f_index,  cur_f_index = self.indices[vid][idx]
+
+        result_data = self.data_process(vid, pre_f_index, vid, cur_f_index)
+        return result_data
+
+
+    def data_process(self,pre_vid, pre_f_index,cur_vid, cur_f_index):
         pre_images, pre_targets = self.load_image(pre_vid, pre_f_index)
         cur_images, cur_targets = self.load_image(cur_vid, cur_f_index, pre_targets["obj_ids"])
 
         if self.transform is not None:
             pre_images, pre_targets = self.transform(pre_images, pre_targets)
             cur_images, cur_targets = self.transform(cur_images, cur_targets)
- 
+
         return {
-            'pre_images': pre_images, 
+            'pre_images': pre_images,
             "cur_images": cur_images,
             'pre_targets': pre_targets,
             'cur_targets': cur_targets,
         }
 
-        # return pre_images, cur_images, pre_targets, cur_targets
-
     def load_image(self, vid, idx: int, pre_obj_ids=None):
         img_path = os.path.join(self.root_dir, vid, 'img1', f'{idx:08d}.jpg')
         img = Image.open(img_path)
         targets = {}
-        w, h = img.size
+        w, h = img._size
         assert w > 0 and h > 0, "invalid image {} with shape {} {}".format(img_path, w, h)
         # obj_idx_offset = self.video_dict[vid] * 100000  # 100000 unique ids is enough for a video.
-
+        targets['file_name']=vid
         targets['boxes'] = []
         targets['obj_ids'] = []
         targets['scores'] = []
@@ -98,6 +123,7 @@ class DanceDataset(Dataset):
                     targets['boxes'].append(xywh)
                     targets['obj_ids'].append(id)
                     targets['scores'].append(1.)
+
         else:
             for id in pre_obj_ids.numpy():
                 if  id in  self.all_labels[vid][idx]:
@@ -110,6 +136,7 @@ class DanceDataset(Dataset):
                     targets['obj_ids'].append(id)
                     targets['scores'].append(0.0)
 
+        targets['frame_id'] = torch.as_tensor(idx, dtype=torch.int64)
         targets['obj_ids'] = torch.as_tensor(targets['obj_ids'], dtype=torch.float32)
         targets['scores'] = torch.as_tensor(targets['scores'])
         targets['boxes'] = torch.as_tensor(targets['boxes'], dtype=torch.float32).reshape(-1, 4)
@@ -146,7 +173,7 @@ class DanceDataset(Dataset):
                 normalize,
             ])
 
-        if image_set == 'val':
+        else: ###### image_set == 'val' :
             return T.Compose([
                 # T.MotRandomResize([800], max_size=1333),
                 # T.RandomResize([(360, 640)]),
@@ -155,7 +182,7 @@ class DanceDataset(Dataset):
                 normalize,
             ])
 
-        raise ValueError(f'unknown {image_set}')
+        raise ValueError(f'unknown {image_set},data exist gt.txt')
 
 
 from typing import Optional, List
@@ -168,7 +195,7 @@ def mot_collate_fn(batch: List[dict]) -> dict:
             ret_dict[key] = ret_dict[key][0]
     return ret_dict
 
-def collate_fn(batch):
+def collate_fn_ori(batch):
     ret_dict = {}
     for key in list(batch[0].keys()):
         # assert not isinstance(batch[0][key], torch.Tensor)
@@ -209,19 +236,102 @@ def collate_fn(batch):
     return ret_dict
 
 
+def collate_fn(batch):
+    ret_dict = {}
+    for key in list(batch[0].keys()):
+        # assert not isinstance(batch[0][key], torch.Tensor)
+        ret_dict[key] = [img_info[key] for img_info in batch]
+        if len(ret_dict[key]) == 1:  # batch_size = 1
+            if isinstance(ret_dict[key][0], torch.Tensor):
+                ret_dict[key] = ret_dict[key][0].unsqueeze(0)
+            elif isinstance(ret_dict[key][0], dict):
+                sub_dict = {}
+                for sub_k in ret_dict[key][0].keys():
+                    sub_dict[sub_k] = ret_dict[key][0][sub_k].unsqueeze(0) if isinstance(ret_dict[key][0][sub_k],
+                                                                                         torch.Tensor) else \
+                    ret_dict[key][0][sub_k]
+                ret_dict[key] = sub_dict
+            else:
+                ret_dict[key] = ret_dict[key][0]
+        else:  # batch_size > 1
+            if isinstance(ret_dict[key][0], dict):
+                sub_dict = {}
+                for sub_k in ret_dict[key][0].keys():
+                    sub_dict[sub_k] = [sub_info[sub_k] for sub_info in ret_dict[key]]
+
+                for sub_k in sub_dict:
+                    if not isinstance(sub_dict[sub_k][0], torch.Tensor):
+                        continue
+                    max_shape = [(data.shape) for data in sub_dict[sub_k]]
+                    max_shape = max(max_shape)
+                    if not len(max_shape):
+                        continue
+                    tmp_data_list = []
+                    for data in sub_dict[sub_k]:
+                        tmp_data = torch.zeros(max_shape)
+                        n = data.shape
+                        tmp_data[:n[0]] = data
+                        tmp_data_list.append(tmp_data)
+                    sub_dict[sub_k] = torch.stack(tmp_data_list, 0)
+                ret_dict[key] = sub_dict
+            else:
+                ret_dict[key] = torch.stack(ret_dict[key], 0)
+
+    return ret_dict
+
+
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
+    import argparse
 
-    data_dir = r"E:\work\code\motrv2\data\DanceTrack"
-    data_set = DanceDataset(data_dir, image_set="train")
-    test_loader = DataLoader(dataset=data_set, batch_size=2, collate_fn=mot_collate_fn, shuffle=True, num_workers=0, drop_last=False)
+
+    def parse_opt():
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--data_type', type=str, default="dance", choices=['dance'], help='data sets')
+        parser.add_argument('--source', type=str, default="/Data/cj/test_redis/DanceTrack/",
+                            help='file/dir/URL/glob, 0 for webcam')
+        parser.add_argument('--mode', type=str, default="train", choices=['train', 'test'], help='data ')
+        parser.add_argument('--batch_size', type=int, default=4, help='total batch size for all GPUs')
+        parser.add_argument('--num_workers', type=int, default=0, help='load data worker number')
+
+        parser.add_argument('--total_epochs', type=int, default=200, help='epoches')
+
+        parser.add_argument('--optim_name', type=str, default="sgd", choices=['sgd'], help='optimizer')
+        parser.add_argument('--lr', type=float, default=0.0001, help='lr')
+        parser.add_argument('--num_classes', type=int, default=2, help='number of boxes class')
+
+        parser.add_argument('--model_name', type=str, default="diff_track", choices=['resnet', 'diff_track'],
+                            help='Select Model')
+        parser.add_argument('--weights', nargs='+', type=str, default='False', help='model path(s)')
+        parser.add_argument('--resume', default=False, help='model path(s)')
+
+        parser.add_argument('--img_size', type=list, default=[(720, 540)], help='inference size h,w')
+        parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+
+        parser.add_argument('--loss_name', type=str, default="general_loss", choices=['general_loss'],
+                            help='Select loss')
+        parser.add_argument('--save_period', type=int, default=1, help='eeight storage step size')
+
+        parser.add_argument('--dec_layers', default=6, type=int,
+                            help="Number of decoding layers in the transformer")
+
+        args = parser.parse_args()
+        return args
+
+
+    # data_dir = r"E:\work\code\motrv2\data\DanceTrack"
+    args = parse_opt()
+    data_set = DanceDataset(args, image_set="train")
+    # test_loader = DataLoader(dataset=data_set, batch_size=2, collate_fn=mot_collate_fn, shuffle=True, num_workers=0, drop_last=False)
+    test_loader = DataLoader(dataset=data_set, batch_size=4, collate_fn=collate_fn, shuffle=True, num_workers=0,
+                             drop_last=False)
     # test_loader = DataLoader(dataset=data_set, batch_size=2, shuffle=True, num_workers=0, drop_last=False)
 
     # for i in range(1):
     #     print(data[i])
     for data in test_loader:
-        pre_imgs = data['pre_imgs']
+        pre_imgs = data['pre_images']
         cur_images = data['cur_images']
         pre_target = data['pre_targets']
         cur_target = data['cur_targets']
-        print(pre_imgs[0].shape, cur_images[1].shape,) # pre_target, cur_target)
+        print(pre_imgs[0].shape, cur_images[1].shape, )  # pre_target, cur_target)

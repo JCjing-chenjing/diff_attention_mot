@@ -96,6 +96,10 @@ class PreData():
         frame_idx = gt_info[:, 0] == frame_id
 
         boxes_xywh = gt_info[frame_idx, 2:6]
+        
+        boxes_xywh[:, 2] = boxes_xywh[:, 0] + boxes_xywh[:, 2] 
+        boxes_xywh[:, 3] = boxes_xywh[:, 1] + boxes_xywh[:, 3] 
+        
         track_id = gt_info[frame_idx, 1]
         img_name = info['img_names'][id]
         img_path=info['img_path'][id]

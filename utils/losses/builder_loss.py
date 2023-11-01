@@ -9,8 +9,7 @@ Github:   https://github.com/Deeachain
 import torch
 
 
-def build_loss(loss_name,args=None, **kwargs):
-
+def build_loss(loss_name, args=None, **kwargs):
 
     criteria = None
     if loss_name == 'detr_loss':
@@ -42,10 +41,4 @@ def build_loss(loss_name,args=None, **kwargs):
         create_loss=General_Loss(args.num_classes)
 
         criteria=create_loss.create_loss
-
-
-
-
-
-
     return criteria

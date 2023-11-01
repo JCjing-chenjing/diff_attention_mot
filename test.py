@@ -5,6 +5,7 @@ import os
 import sys
 import torch
 from pathlib import Path
+import numpy as np 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]
 if str(ROOT) not in sys.path:
@@ -28,15 +29,15 @@ def parse_opt():
     parser.add_argument('--source', type=str, default="/Data/cj/test_redis/DanceTrack/val", help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--num_classes', type=int, default=2,  help='number of boxes class')
     parser.add_argument('--model_name', type=str, default="diff_track", choices=['resnet', 'diff_track'], help='Select Model')
-    parser.add_argument('--weights',  default='/Data/cj/test_redis/DanceTrack/diff_attention_mot_old/runs/train/exp2/diff_track_dance_40.pth', help='model path(s)')
+    parser.add_argument('--weights',  default='/Data/cj/test_redis/DanceTrack/diff_attention_mot/runs/train/exp5/best_79.pth', help='model path(s)')
 
 
-    parser.add_argument('--img_size',  type=list, default=(540, 720), help='inference size h,w')
+    parser.add_argument('--img_size',  type=list, default=(720, 540), help='inference size h,w')
     parser.add_argument('--device', default='1', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--project', default=ROOT / 'runs/test', help='save results to project/name')
 
-    parser.add_argument('--save_video', default=False, help='save video to project/name')
-    parser.add_argument('--save_img',  default=False, help='save img to project/name')
+    parser.add_argument('--save_video', default=True, help='save video to project/name')
+    parser.add_argument('--save_img',  default=True, help='save img to project/name')
     parser.add_argument('--show_video', default=False, help='save video to project/name')
 
 
@@ -89,18 +90,23 @@ def main(args):
                 pbar.update()
 
                 # 是模型给出结果，暂时使用cur_data的结果
-                trackid_lst=cur_data['track_id']
-                box_lst=cur_data['boxes_xywh_ori']
-                box_lst[:,2]=box_lst[:,0]+box_lst[:,2]
-                box_lst[:, 3] = box_lst[:, 1] + box_lst[:, 3]
-
-
+                # trackid_lst=cur_data['track_id']
+                # box_lst=cur_data['boxes_xywh_ori']
+                # box_lst[:,2]=box_lst[:,0]+box_lst[:,2]
+                # box_lst[:, 3] = box_lst[:, 1] + box_lst[:, 3]
+                
+                box_lst = pred_boxes.cpu().squeeze(0).detach().numpy()
+                # box_lst = pred_boxes.cpu().squeeze(0).detach().numpy()
+                trackid_lst = np.arange(len(box_lst))
+                
 
                 if args.save_video or args.save_img or args.show_video:
                     from utils.vision.visual import draw_img,show_video
                     from utils.checkpoint.file_utils import build_dir
                     img=cv2.imread(cur_data['img_path'])
-
+                    h,w,_ = img.shape
+                    box_lst[:,::2] = box_lst[:,0::2]*w
+                    box_lst[:,1::2] = box_lst[:,1::2]*h
                     img=draw_img(img, trackid_lst, box_lst, score_lst=None,
                              bbox_color='green',
                              text_color='green',

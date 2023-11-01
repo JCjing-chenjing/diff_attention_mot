@@ -98,7 +98,7 @@ class DIFFTrack(nn.Module):
         pre_out = self.get_feature(pre_img)
         cur_out = self.get_feature(cur_img)
         #Splice two images feature
-        feature = torch.cat([pre_out, cur_out], 1)
+        feature = torch.cat([pre_out, cur_out], 1)  # [2,256,17,23]
         #Calculate the Mutual information of two images feature
         diff_feature = self.conv2(feature)
         diff_feature = self.norm_layer(diff_feature)  
@@ -112,6 +112,10 @@ class DIFFTrack(nn.Module):
         ], dim=-1).flatten(0, 1).unsqueeze(1)
         
         encoder_out = self.encoder(pos + 0.1 * diff_feature.flatten(2).permute(2, 0, 1))
+
+
+
+
         query_embed = self.box2embed(pre_boxes).permute(1,0,2)
         decoder_out = self.decoder(query_embed, encoder_out)
         box_classes = self.linear_class(decoder_out).permute(1,0,2)
