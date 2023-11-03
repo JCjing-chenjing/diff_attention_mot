@@ -1,0 +1,13 @@
+# pip install -r requirements.txt
+# 自行安装对应pytorch
+# Base ----------------------------------------
+numpy
+opencv-python
+tqdm
+scipy
+packaging
+matplotlib
+
+
+
+
